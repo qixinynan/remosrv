@@ -1,4 +1,6 @@
-class Server { 
+const {log} = require("./utils");
+
+class Server {
   /**@type {Set<Client>} */
   static clients = new Set();
   /**
@@ -43,6 +45,16 @@ class Server {
       else {        
         client.ws.close();
         this.delete(client);
+      }
+    })
+  }
+
+  static pingAll() {
+    this.clients.forEach(client => {
+      client.ws.send("ping")
+      if (Date.now() - client.lastPing > 10000) {
+        log("Client ping timeout");
+        client.ws.close();
       }
     })
   }

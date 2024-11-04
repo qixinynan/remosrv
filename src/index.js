@@ -13,10 +13,9 @@ expressWs(app);
 
 app.ws('/ws', (ws, req) => {
     utils.log("New Connection")
-    const clientIp = req.ip || req.socket.remoteAddress; // 获取客户端 IP 地址
-    const client = new Client(ws, clientIp);
+    const clientIp = req.ip || req.socket.remoteAddress; // 获取客户端 IP 地址
+    const client = new Client(ws, clientIp, Date.now());
     Server.add(client);
-    
 });
 
 app.get('/', (req, res) => {
@@ -40,3 +39,6 @@ function getCommand () {
   })
 }
 
+setInterval(() => {
+    Server.pingAll()
+}, 5000);
