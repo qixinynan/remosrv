@@ -21,6 +21,22 @@ function list() {
   })
 }
 
+function sleep(delay) {
+    var start = (new Date()).getTime();
+    while((new Date()).getTime() - start < delay) {
+        continue;
+    }
+}
+
+
+function kmute() {
+  for(var i = 0; i < 3; i++) {
+    sleep(1000);
+    console.log(i);
+    Server.broadcast("mute") 
+  }
+}
+  
 /**
  * 
  * @param {String} msg 
@@ -33,6 +49,17 @@ function processCommand(msg) {
     switch (method) {
       case "!ls":
         list();
+        break;
+      case "!kmute":
+        kmute();
+        break;
+      case "!rc":
+        Server.randomClose = !Server.randomClose;
+        console.log(Server.randomClose)
+        break;
+      case "!dw":
+        Server.disableWLAN= !Server.disableWLAN;
+        console.log(Server.disableWLAN)
         break;
       default:
         console.log(`Can't resolve server command: ${method}`);

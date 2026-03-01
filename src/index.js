@@ -23,6 +23,16 @@ app.get('/', (req, res) => {
 });
 
 
+app.get('/status', (req, res) => {
+    res.send("normal");
+})
+
+app.get('/gift', (req, res) => {
+    res.send("请稍等...");
+    console.log("GIFTTTTT");
+})
+
+
 app.listen(5599, () => {
     console.log('WebSocket server is running on ws://localhost:5599/ws');
     getCommand();
