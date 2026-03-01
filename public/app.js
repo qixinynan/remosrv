@@ -251,11 +251,19 @@ async function loadRemoteFiles(pathValue) {
   renderFileList();
 
   try {
-    const res = await fetch("/api/files/list", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ip: state.fileBrowser.ip, path: nextPath}),
-    });
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 12000);
+    let res;
+    try {
+      res = await fetch("/api/files/list", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ip: state.fileBrowser.ip, path: nextPath}),
+        signal: ctrl.signal,
+      });
+    } finally {
+      clearTimeout(t);
+    }
     const data = await res.json();
     if (!res.ok || !data.ok) {
       throw new Error(data.message || "Load files failed");
@@ -321,8 +329,8 @@ els.commandForm.addEventListener("submit", async (event) => {
   const rawCommand = els.commandInput.value.trim();
   if (!rawCommand) return;
   const useCmdMode = Boolean(els.cmdMode && els.cmdMode.checked);
-  const command = useCmdMode && !rawCommand.startsWith("!")
-    ? `!cmd ${rawCommand}`
+  const command = useCmdMode && !rawCommand.startsWith("!") && !rawCommand.startsWith("#")
+    ? `#${rawCommand}`
     : rawCommand;
   try {
     await sendCommand(command);

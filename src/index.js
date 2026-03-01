@@ -1,7 +1,6 @@
 const express = require('express');
 const expressWs = require('express-ws');
 const {processCommand} = require('./cmd.js')
-const {Message} = require("./msg");
 const {Server} = require('./server.js');
 const {Client} = require('./client.js')
 const path = require("path");
@@ -124,22 +123,29 @@ app.post("/api/files/list", async (req, res) => {
 
     const pathValue = normalizeWindowsPath(requestedPath);
     const escapedPath = pathValue.replaceAll("\"", "\"\"");
-    const cmdLine = `cd /d "${escapedPath}" && dir`;
-    const packet = JSON.stringify(Message.new("cmd", cmdLine));
-    const sent = Server.sendToDevice(ip, packet);
+    const cmdLine = `#cd /d "${escapedPath}" && dir`;
+    const sent = Server.sendToDevice(ip, cmdLine);
     if (!sent) {
         return res.status(409).json({ok: false, message: "device is offline"});
     }
     Server.recordActivity("command", {
         source: "web-file-browser",
         ip,
-        command: `!cmd ${cmdLine}`,
+        command: cmdLine,
     });
 
     try {
         const output = await Server.waitDeviceMessage(ip, 10000, (message) => {
-            return !String(message).startsWith("Cannot find method:");
+            const text = String(message || "");
+            return text.trim().length > 0;
         });
+        if (String(output).startsWith("Cannot find method:")) {
+            return res.status(400).json({
+                ok: false,
+                message: "Device rejected file browser command",
+                detail: String(output),
+            });
+        }
         const parsed = parseWindowsDirOutput(output);
         return res.json({
             ok: true,
