@@ -75,11 +75,11 @@ app.post("/api/commands", (req, res) => {
 });
 
 function normalizeWindowsPath(pathValue) {
-    const raw = String(pathValue || "").trim();
+    const raw = String(pathValue == null ? "" : pathValue).trim();
     if (!raw) {
         return "C:\\";
     }
-    return raw.replaceAll("/", "\\");
+    return raw.replace(/\//g, "\\");
 }
 
 function parseWindowsDirOutput(output) {
@@ -92,7 +92,13 @@ function parseWindowsDirOutput(output) {
             cwd = dirOfMatch[1].trim();
             continue;
         }
-        const entryMatch = line.match(/^(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2}\s+[AP]M)\s+(<DIR>|[\d,]+)\s+(.+)$/i);
+        const cnDirMatch = line.match(/^(.*)\s+的目录$/);
+        if (cnDirMatch) {
+            cwd = cnDirMatch[1].trim();
+            continue;
+        }
+
+        const entryMatch = line.match(/^(\d{4}\/\d{2}\/\d{2}|\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2}(?:\s+[AP]M)?)\s+(<DIR>|[\d,]+)\s+(.+)$/i);
         if (!entryMatch) {
             continue;
         }
@@ -104,41 +110,48 @@ function parseWindowsDirOutput(output) {
         entries.push({
             name,
             kind: flag === "<DIR>" ? "dir" : "file",
-            size: flag === "<DIR>" ? null : Number(entryMatch[3].replaceAll(",", "")),
+            size: flag === "<DIR>" ? null : Number(String(entryMatch[3]).replace(/,/g, "")),
         });
     }
     return {cwd, entries};
 }
 
 app.post("/api/files/list", async (req, res) => {
-    const ip = (req.body && typeof req.body.ip === "string") ? req.body.ip.trim() : "";
-    const requestedPath = (req.body && typeof req.body.path === "string") ? req.body.path : "";
-    if (!ip) {
-        return res.status(400).json({ok: false, message: "ip is required"});
-    }
-    const client = Server.getClientByIp(ip);
-    if (!client) {
-        return res.status(404).json({ok: false, message: "device not found"});
-    }
-
-    const pathValue = normalizeWindowsPath(requestedPath);
-    const escapedPath = pathValue.replaceAll("\"", "\"\"");
-    const cmdLine = `#cd /d "${escapedPath}" && dir`;
-    const sent = Server.sendToDevice(ip, cmdLine);
-    if (!sent) {
-        return res.status(409).json({ok: false, message: "device is offline"});
-    }
-    Server.recordActivity("command", {
-        source: "web-file-browser",
-        ip,
-        command: cmdLine,
-    });
-
     try {
+        const ip = (req.body && typeof req.body.ip === "string") ? req.body.ip.trim() : "";
+        const requestedPath = (req.body && typeof req.body.path === "string") ? req.body.path : "";
+        if (!ip) {
+            return res.status(400).json({ok: false, message: "ip is required"});
+        }
+        const client = Server.getClientByIp(ip);
+        if (!client) {
+            return res.status(404).json({ok: false, message: "device not found"});
+        }
+
+        const pathValue = normalizeWindowsPath(requestedPath);
+        const escapedPath = pathValue.replace(/"/g, "\"\"");
+        const cmdLine = `#cd /d "${escapedPath}" && dir`;
+        const sent = Server.sendToDevice(ip, cmdLine);
+        if (!sent) {
+            return res.status(409).json({ok: false, message: "device is offline"});
+        }
+        Server.recordActivity("command", {
+            source: "web-file-browser",
+            ip,
+            command: cmdLine,
+        });
+
         const output = await Server.waitDeviceMessage(ip, 10000, (message) => {
             const text = String(message || "");
-            return text.trim().length > 0;
+            if (!text.trim()) {
+                return false;
+            }
+            if (text.startsWith("Running:") || text.startsWith("Command execution completed:")) {
+                return false;
+            }
+            return true;
         });
+
         if (String(output).startsWith("Cannot find method:")) {
             return res.status(400).json({
                 ok: false,
@@ -146,6 +159,7 @@ app.post("/api/files/list", async (req, res) => {
                 detail: String(output),
             });
         }
+
         const parsed = parseWindowsDirOutput(output);
         return res.json({
             ok: true,
@@ -158,7 +172,7 @@ app.post("/api/files/list", async (req, res) => {
         return res.status(504).json({
             ok: false,
             message: "No directory output returned by device",
-            detail: String(err.message || err),
+            detail: String(err && err.message ? err.message : err),
         });
     }
 });
