@@ -1,0 +1,214 @@
+:root {
+  --bg1: #f4f7fb;
+  --bg2: #dde6f4;
+  --panel: #ffffff;
+  --ink: #15213a;
+  --muted: #5c6f91;
+  --line: #d8e1ef;
+  --accent: #1473e6;
+  --accent-ink: #ffffff;
+  --warn: #ad2f2f;
+  --ok: #0f915f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  color: var(--ink);
+  background: linear-gradient(145deg, var(--bg1), var(--bg2));
+}
+
+.bg {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at top right, rgba(20, 115, 230, 0.12), transparent 45%),
+    radial-gradient(circle at bottom left, rgba(15, 145, 95, 0.12), transparent 40%);
+}
+
+.layout {
+  position: relative;
+  z-index: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 360px 1fr;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.side h1 {
+  margin: 0;
+  font-size: 1.6rem;
+}
+
+.sub {
+  margin: 0;
+  color: var(--muted);
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  box-shadow: 0 8px 24px rgba(21, 33, 58, 0.07);
+}
+
+h2 {
+  margin: 0 0 10px;
+  font-size: 1.05rem;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.form,
+.command-row {
+  display: grid;
+  gap: 8px;
+}
+
+.command-row {
+  grid-template-columns: 1fr auto;
+}
+
+input,
+button {
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  padding: 10px 12px;
+  font-size: 0.95rem;
+}
+
+input {
+  background: #fbfdff;
+}
+
+button {
+  cursor: pointer;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+button.ghost {
+  background: #eef4ff;
+  color: var(--ink);
+  border-color: #c9d7ee;
+}
+
+button.warn {
+  background: #fff0f0;
+  border-color: #efcbcb;
+  color: var(--warn);
+}
+
+.device-list,
+.shortcut-list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.device-item,
+.shortcut-item {
+  border: 1px solid var(--line);
+  background: #fcfdff;
+  border-radius: 10px;
+  padding: 8px;
+}
+
+.device-item small {
+  color: var(--muted);
+}
+
+.shortcut-title {
+  font-weight: 600;
+}
+
+.shortcut-command {
+  font-family: "SF Mono", "Menlo", monospace;
+  font-size: 0.86rem;
+  color: #2a3c5e;
+  word-break: break-word;
+  margin: 4px 0 8px;
+}
+
+.shortcut-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.logs-card {
+  min-height: 60vh;
+}
+
+.logs {
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #0f1728;
+  color: #dde7ff;
+  height: 62vh;
+  overflow: auto;
+  padding: 10px;
+  font-family: "SF Mono", "Menlo", monospace;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.log-line {
+  margin-bottom: 6px;
+  word-break: break-word;
+}
+
+.log-time {
+  color: #8ba2d0;
+}
+
+.log-type {
+  color: #9fe8c3;
+}
+
+.log-type.command {
+  color: #8dc6ff;
+}
+
+.log-type.error {
+  color: #ff9f9f;
+}
+
+.hidden {
+  display: none;
+}
+
+@media (max-width: 980px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .logs {
+    height: 45vh;
+  }
+}

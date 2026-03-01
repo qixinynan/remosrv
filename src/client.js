@@ -23,11 +23,13 @@ class Client {
   }
 
   processMsg(msg) {
-    if (msg === "ping") {
+    const text = Buffer.isBuffer(msg) ? msg.toString("utf8") : String(msg);
+    if (text === "ping") {
       this.lastPing = Date.now();
     }
     else {
-      utils.log(`@Received: ${msg}`);
+      utils.log(`@Received: ${text}`);
+      Server.onDeviceMessage(this.ip, text);
     }
   }
 }

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Remote Device Console</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="bg"></div>
+  <main class="layout">
+    <section class="panel side">
+      <h1>Remote Console</h1>
+      <p class="sub">Browser control panel</p>
+
+      <div class="card">
+        <div class="row">
+          <span>Online Devices</span>
+          <strong id="onlineCount">0</strong>
+        </div>
+        <ul id="deviceList" class="device-list"></ul>
+      </div>
+
+      <div class="card">
+        <h2>Shortcuts</h2>
+        <form id="shortcutForm" class="form">
+          <input id="shortcutName" placeholder="Name" required />
+          <input id="shortcutCommand" placeholder="Command" required />
+          <button type="submit" id="shortcutSubmit">Save Shortcut</button>
+          <button type="button" id="shortcutCancel" class="ghost hidden">Cancel Edit</button>
+        </form>
+        <ul id="shortcutList" class="shortcut-list"></ul>
+      </div>
+    </section>
+
+    <section class="panel main">
+      <div class="card">
+        <h2>Run Command</h2>
+        <form id="commandForm" class="command-row">
+          <input id="commandInput" placeholder="Type command, e.g. !ls or custom payload" required />
+          <button type="submit">Send</button>
+        </form>
+      </div>
+
+      <div class="card logs-card">
+        <div class="row">
+          <h2>Activity</h2>
+          <button id="clearLogs" class="ghost">Clear View</button>
+        </div>
+        <div id="logs" class="logs"></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

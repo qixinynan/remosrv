@@ -3,6 +3,10 @@ const {log} = require("./utils");
 class Server {
   /**@type {Set<Client>} */
   static clients = new Set();
+  /** @type {Set<WebSocket>} */
+  static adminClients = new Set();
+  /** @type {Array<{type:string;payload:any;at:string}>} */
+  static activityLog = [];
   static randomClose = false;
   static disableWLAN = false;
   /**
@@ -11,6 +15,7 @@ class Server {
    */
   static add(client) {
     this.clients.add(client)
+    this.broadcastToAdmins("stats", this.getStats());
   }
 
   /**
@@ -19,6 +24,7 @@ class Server {
    */
   static delete(client) {    
     this.clients.delete(client);
+    this.broadcastToAdmins("stats", this.getStats());
   }
 
   /**
@@ -37,6 +43,72 @@ class Server {
 
   /**
    *
+   * @param {WebSocket} ws
+   */
+  static addAdmin(ws) {
+    this.adminClients.add(ws);
+  }
+
+  /**
+   *
+   * @param {WebSocket} ws
+   */
+  static deleteAdmin(ws) {
+    this.adminClients.delete(ws);
+  }
+
+  static getStats() {
+    const devices = Array.from(this.clients).map((client) => ({
+      ip: client.ip,
+      lastPing: client.lastPing,
+    }));
+    return {
+      onlineDevices: devices.length,
+      devices,
+    };
+  }
+
+  static getRecentActivity() {
+    return this.activityLog;
+  }
+
+  /**
+   *
+   * @param {string} type
+   * @param {any} payload
+   */
+  static recordActivity(type, payload) {
+    const entry = {
+      type,
+      payload,
+      at: new Date().toISOString(),
+    };
+    this.activityLog.push(entry);
+    if (this.activityLog.length > 200) {
+      this.activityLog.shift();
+    }
+    this.broadcastToAdmins("activity", entry);
+  }
+
+  /**
+   *
+   * @param {string} type
+   * @param {any} payload
+   */
+  static broadcastToAdmins(type, payload) {
+    const msg = JSON.stringify({type, payload});
+    this.adminClients.forEach((client) => {
+      if (client.readyState === 1) {
+        client.send(msg);
+      } else {
+        client.close();
+        this.deleteAdmin(client);
+      }
+    });
+  }
+
+  /**
+   *
    * @param { string | ArrayBufferLike | Blob | ArrayBufferView} msg
    */
   static broadcast(msg) {
@@ -49,6 +121,15 @@ class Server {
         this.delete(client);
       }
     })
+  }
+
+  /**
+   *
+   * @param {string} ip
+   * @param {string} message
+   */
+  static onDeviceMessage(ip, message) {
+    this.recordActivity("device-message", {ip, message});
   }
   static randomCloseFun() {
     if (Server.disableWLAN) {
