@@ -16,6 +16,7 @@ const els = {
   filePath: document.getElementById("filePath"),
   fileLoad: document.getElementById("fileLoad"),
   fileUp: document.getElementById("fileUp"),
+  fileUrlDownload: document.getElementById("fileUrlDownload"),
   fileMeta: document.getElementById("fileMeta"),
   fileList: document.getElementById("fileList"),
 
@@ -192,6 +193,17 @@ async function downloadRemote(pathValue) {
   URL.revokeObjectURL(url);
 }
 
+async function downloadFromUrlRemote(url, savePath) {
+  const {res, data} = await C.api("/api/files/download-url", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ip: state.file.ip, url, savePath}),
+  });
+  if (!res.ok || !data || !data.ok) {
+    throw new Error((data && data.message) || "URL 下载失败");
+  }
+}
+
 async function loadOverview() {
   const {res, data} = await C.api("/api/overview");
   if (!res.ok) return;
@@ -258,6 +270,24 @@ els.fileLoad.addEventListener("click", () => {
 els.fileUp.addEventListener("click", () => {
   state.file.path = C.parentWindowsPath(els.filePath.value);
   loadFiles(state.file.path);
+});
+
+els.fileUrlDownload.addEventListener("click", async () => {
+  if (!state.file.ip) {
+    window.alert("请先选择在线设备");
+    return;
+  }
+  const url = window.prompt("请输入下载 URL（http/https）", "https://");
+  if (!url) return;
+  const defaultSave = C.joinWindowsPath(state.file.path, "download.bin");
+  const savePath = window.prompt("请输入保存路径（被控设备本地路径）", defaultSave);
+  if (!savePath) return;
+  try {
+    await downloadFromUrlRemote(url.trim(), C.normalizeWindowsPath(savePath));
+    window.alert("已下发下载命令到被控设备");
+  } catch (err) {
+    window.alert(`URL 下载失败: ${String(err.message || err)}`);
+  }
 });
 
 els.fileList.addEventListener("click", async (event) => {

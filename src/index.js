@@ -487,6 +487,37 @@ app.post("/api/files/download", requireAdminAuth, async (req, res) => {
   }
 });
 
+app.post("/api/files/download-url", requireAdminAuth, async (req, res) => {
+  try {
+    const ip = req.body && typeof req.body.ip === "string" ? req.body.ip.trim() : "";
+    const url = req.body && typeof req.body.url === "string" ? req.body.url.trim() : "";
+    const savePathRaw = req.body && typeof req.body.savePath === "string" ? req.body.savePath : "";
+    if (!ip || !url || !savePathRaw) {
+      return res.status(400).json({ok: false, message: "ip/url/savePath are required"});
+    }
+    if (!/^https?:\/\//i.test(url)) {
+      return res.status(400).json({ok: false, message: "url must start with http:// or https://"});
+    }
+
+    const savePath = normalizeWindowsPath(savePathRaw);
+    const urlPs = escapePsSingleQuoted(url);
+    const savePathPs = escapePsSingleQuoted(savePath);
+    const cmdLine = `#powershell -NoProfile -Command "$ProgressPreference='SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '${urlPs}' -OutFile '${savePathPs}'"`;
+
+    const sent = await sendDeviceCommand(ip, cmdLine, "web-file-url-download");
+    if (!sent.ok) {
+      return res.status(sent.status).json({ok: false, message: sent.message});
+    }
+    return res.json({ok: true, command: cmdLine});
+  } catch (err) {
+    return res.status(500).json({
+      ok: false,
+      message: "download-url command failed",
+      detail: String(err && err.message ? err.message : err),
+    });
+  }
+});
+
 app.get("/api/shortcuts", requireAdminAuth, (req, res) => {
   res.json({items: listShortcuts()});
 });
