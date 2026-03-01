@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RemoSrv 控制台</title>
+  <link rel="stylesheet" href="/assets/css/base.css" />
+  <link rel="stylesheet" href="/assets/css/dashboard.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">RemoSrv</div>
+      <nav class="menu">
+        <a class="menu-item active" href="/">控制台</a>
+        <a class="menu-item" href="/files">文件管理</a>
+      </nav>
+      <button id="logoutBtn" class="ghost">退出登录</button>
+    </aside>
+
+    <main class="main">
+      <section class="card">
+        <div class="card-header">
+          <h2>在线设备</h2>
+          <strong id="onlineCount">0</strong>
+        </div>
+        <ul id="deviceList" class="device-list"></ul>
+      </section>
+
+      <section class="card">
+        <h2>发送命令</h2>
+        <form id="commandForm" class="row-form">
+          <input id="commandInput" placeholder="输入命令，例如 dir / !ls" required />
+          <button type="submit">发送</button>
+        </form>
+        <label class="inline-check">
+          <input id="cmdMode" type="checkbox" checked />
+          <span>普通输入自动包装为 <code>#...</code></span>
+        </label>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <h2>快捷命令</h2>
+          <a class="btn-link" href="/files">打开全屏文件管理器</a>
+        </div>
+        <form id="shortcutForm" class="shortcut-form">
+          <input id="shortcutName" placeholder="名称" required />
+          <input id="shortcutCommand" placeholder="命令" required />
+          <button type="submit" id="shortcutSubmit">保存</button>
+          <button type="button" id="shortcutCancel" class="ghost hidden">取消</button>
+        </form>
+        <ul id="shortcutList" class="shortcut-list"></ul>
+      </section>
+
+      <section class="card logs-card">
+        <div class="card-header">
+          <h2>Activity</h2>
+          <button id="clearLogs" class="ghost">清空</button>
+        </div>
+        <div id="logs" class="logs"></div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/assets/js/common.js"></script>
+  <script src="/assets/js/dashboard.js"></script>
+</body>
+</html>

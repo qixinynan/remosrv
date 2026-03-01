@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RemoSrv 文件管理</title>
+  <link rel="stylesheet" href="/assets/css/base.css" />
+  <link rel="stylesheet" href="/assets/css/files.css" />
+</head>
+<body>
+  <div class="shell full">
+    <aside class="sidebar">
+      <div class="brand">RemoSrv</div>
+      <nav class="menu">
+        <a class="menu-item" href="/">控制台</a>
+        <a class="menu-item active" href="/files">文件管理</a>
+      </nav>
+      <button id="logoutBtn" class="ghost">退出登录</button>
+    </aside>
+
+    <main class="file-main">
+      <header class="toolbar card">
+        <div class="tool-left">
+          <select id="fileDevice"></select>
+          <input id="filePath" value="C:\\" placeholder="路径" />
+          <button id="fileLoad" type="button">加载</button>
+          <button id="fileUp" type="button" class="ghost">上一级</button>
+        </div>
+        <small id="fileMeta" class="muted">请选择设备并加载目录</small>
+      </header>
+
+      <section class="card table-card">
+        <div class="table-head">
+          <span>名称</span>
+          <span>类型</span>
+          <span>大小</span>
+          <span>操作</span>
+        </div>
+        <ul id="fileList" class="table-body"></ul>
+      </section>
+    </main>
+  </div>
+
+  <script src="/assets/js/common.js"></script>
+  <script src="/assets/js/files.js"></script>
+</body>
+</html>

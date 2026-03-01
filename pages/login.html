@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RemoSrv 登录</title>
+  <link rel="stylesheet" href="/assets/css/base.css" />
+  <link rel="stylesheet" href="/assets/css/login.css" />
+</head>
+<body>
+  <main class="login-wrap">
+    <section class="login-card">
+      <h1>RemoSrv Admin</h1>
+      <p class="muted">请输入账号密码访问管理后台</p>
+      <form id="loginForm" class="login-form">
+        <label>
+          <span>账号</span>
+          <input id="username" autocomplete="username" required />
+        </label>
+        <label>
+          <span>密码</span>
+          <input id="password" type="password" autocomplete="current-password" required />
+        </label>
+        <button type="submit">登录</button>
+      </form>
+      <p id="loginError" class="error hidden"></p>
+    </section>
+  </main>
+  <script src="/assets/js/login.js"></script>
+</body>
+</html>
