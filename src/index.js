@@ -130,6 +130,23 @@ function escapeCmdPath(pathValue) {
   return String(pathValue || "").replace(/"/g, "\"\"");
 }
 
+function escapePsSingleQuoted(pathValue) {
+  return String(pathValue || "").replace(/'/g, "''");
+}
+
+async function sendDeviceCommand(ip, command, source = "web-file-browser") {
+  const client = Server.getClientByIp(ip);
+  if (!client) {
+    return {ok: false, status: 404, message: "device not found"};
+  }
+  const sent = Server.sendToDevice(ip, command);
+  if (!sent) {
+    return {ok: false, status: 409, message: "device is offline"};
+  }
+  Server.recordActivity("command", {source, ip, command});
+  return {ok: true};
+}
+
 function parseWindowsDirOutput(output) {
   const lines = String(output || "")
     .split(/\r?\n/)
@@ -285,24 +302,13 @@ app.post("/api/files/list", requireAdminAuth, async (req, res) => {
       return res.status(400).json({ok: false, message: "ip is required"});
     }
 
-    const client = Server.getClientByIp(ip);
-    if (!client) {
-      return res.status(404).json({ok: false, message: "device not found"});
-    }
-
     const pathValue = normalizeWindowsPath(requestedPath);
     const escapedPath = escapeCmdPath(pathValue);
     const cmdLine = `#cd /d "${escapedPath}" && dir`;
-    const sent = Server.sendToDevice(ip, cmdLine);
-    if (!sent) {
-      return res.status(409).json({ok: false, message: "device is offline"});
+    const sent = await sendDeviceCommand(ip, cmdLine);
+    if (!sent.ok) {
+      return res.status(sent.status).json({ok: false, message: sent.message});
     }
-
-    Server.recordActivity("command", {
-      source: "web-file-browser",
-      ip,
-      command: cmdLine,
-    });
 
     const output = await Server.waitDeviceMessage(ip, 10000, (message) => {
       const text = String(message || "");
@@ -350,32 +356,132 @@ app.post("/api/files/delete", requireAdminAuth, async (req, res) => {
       return res.status(400).json({ok: false, message: "kind must be file or dir"});
     }
 
-    const client = Server.getClientByIp(ip);
-    if (!client) {
-      return res.status(404).json({ok: false, message: "device not found"});
-    }
-
     const normalizedPath = normalizeWindowsPath(targetPath);
     const escapedPath = escapeCmdPath(normalizedPath);
     const cmdLine = kind === "dir"
       ? `#rd /s /q "${escapedPath}"`
       : `#del /f /q "${escapedPath}"`;
-    const sent = Server.sendToDevice(ip, cmdLine);
-    if (!sent) {
-      return res.status(409).json({ok: false, message: "device is offline"});
+    const sent = await sendDeviceCommand(ip, cmdLine);
+    if (!sent.ok) {
+      return res.status(sent.status).json({ok: false, message: sent.message});
     }
-
-    Server.recordActivity("command", {
-      source: "web-file-browser",
-      ip,
-      command: cmdLine,
-    });
 
     return res.json({ok: true, command: cmdLine});
   } catch (err) {
     return res.status(500).json({
       ok: false,
       message: "delete command failed",
+      detail: String(err && err.message ? err.message : err),
+    });
+  }
+});
+
+app.post("/api/files/copy", requireAdminAuth, async (req, res) => {
+  try {
+    const ip = req.body && typeof req.body.ip === "string" ? req.body.ip.trim() : "";
+    const srcPath = req.body && typeof req.body.srcPath === "string" ? req.body.srcPath : "";
+    const dstPath = req.body && typeof req.body.dstPath === "string" ? req.body.dstPath : "";
+    const kind = req.body && typeof req.body.kind === "string" ? req.body.kind.trim().toLowerCase() : "";
+    if (!ip || !srcPath || !dstPath || !kind) {
+      return res.status(400).json({ok: false, message: "ip/srcPath/dstPath/kind are required"});
+    }
+    if (kind !== "file" && kind !== "dir") {
+      return res.status(400).json({ok: false, message: "kind must be file or dir"});
+    }
+
+    const src = escapeCmdPath(normalizeWindowsPath(srcPath));
+    const dst = escapeCmdPath(normalizeWindowsPath(dstPath));
+    const cmdLine = kind === "dir"
+      ? `#xcopy /e /i /h /y "${src}" "${dst}"`
+      : `#copy /y "${src}" "${dst}"`;
+
+    const sent = await sendDeviceCommand(ip, cmdLine);
+    if (!sent.ok) {
+      return res.status(sent.status).json({ok: false, message: sent.message});
+    }
+    return res.json({ok: true, command: cmdLine});
+  } catch (err) {
+    return res.status(500).json({
+      ok: false,
+      message: "copy command failed",
+      detail: String(err && err.message ? err.message : err),
+    });
+  }
+});
+
+app.post("/api/files/move", requireAdminAuth, async (req, res) => {
+  try {
+    const ip = req.body && typeof req.body.ip === "string" ? req.body.ip.trim() : "";
+    const srcPath = req.body && typeof req.body.srcPath === "string" ? req.body.srcPath : "";
+    const dstPath = req.body && typeof req.body.dstPath === "string" ? req.body.dstPath : "";
+    if (!ip || !srcPath || !dstPath) {
+      return res.status(400).json({ok: false, message: "ip/srcPath/dstPath are required"});
+    }
+
+    const src = escapeCmdPath(normalizeWindowsPath(srcPath));
+    const dst = escapeCmdPath(normalizeWindowsPath(dstPath));
+    const cmdLine = `#move /y "${src}" "${dst}"`;
+
+    const sent = await sendDeviceCommand(ip, cmdLine);
+    if (!sent.ok) {
+      return res.status(sent.status).json({ok: false, message: sent.message});
+    }
+    return res.json({ok: true, command: cmdLine});
+  } catch (err) {
+    return res.status(500).json({
+      ok: false,
+      message: "move command failed",
+      detail: String(err && err.message ? err.message : err),
+    });
+  }
+});
+
+app.post("/api/files/download", requireAdminAuth, async (req, res) => {
+  try {
+    const ip = req.body && typeof req.body.ip === "string" ? req.body.ip.trim() : "";
+    const targetPath = req.body && typeof req.body.path === "string" ? req.body.path : "";
+    if (!ip || !targetPath) {
+      return res.status(400).json({ok: false, message: "ip/path are required"});
+    }
+
+    const normalizedPath = normalizeWindowsPath(targetPath);
+    const pathForPs = escapePsSingleQuoted(normalizedPath);
+    const cmdLine = `#powershell -NoProfile -Command "$p='${pathForPs}'; if (!(Test-Path -LiteralPath $p -PathType Leaf)) { Write-Output '__REMOSRV_ERR__NOT_FILE'; exit 2 }; Write-Output '__REMOSRV_B64_BEGIN__'; [Convert]::ToBase64String([IO.File]::ReadAllBytes($p)); Write-Output '__REMOSRV_B64_END__'"`;
+    const sent = await sendDeviceCommand(ip, cmdLine, "web-file-download");
+    if (!sent.ok) {
+      return res.status(sent.status).json({ok: false, message: sent.message});
+    }
+
+    const output = await Server.waitDeviceMessage(ip, 15000, (message) => {
+      const text = String(message || "");
+      if (!text.trim()) return false;
+      if (text.startsWith("Running:") || text.startsWith("Command execution completed:")) {
+        return false;
+      }
+      return text.includes("__REMOSRV_B64_BEGIN__") || text.includes("__REMOSRV_ERR__NOT_FILE");
+    });
+
+    if (output.includes("__REMOSRV_ERR__NOT_FILE")) {
+      return res.status(400).json({ok: false, message: "target is not a file"});
+    }
+
+    const begin = output.indexOf("__REMOSRV_B64_BEGIN__");
+    const end = output.indexOf("__REMOSRV_B64_END__");
+    if (begin < 0 || end < 0 || end <= begin) {
+      return res.status(500).json({ok: false, message: "download payload parse failed"});
+    }
+    const raw = output.slice(begin + "__REMOSRV_B64_BEGIN__".length, end);
+    const base64 = raw.replace(/\s+/g, "");
+    if (!base64) {
+      return res.status(500).json({ok: false, message: "empty file payload"});
+    }
+
+    const fileName = path.basename(normalizedPath);
+    return res.json({ok: true, fileName, base64});
+  } catch (err) {
+    return res.status(504).json({
+      ok: false,
+      message: "download command failed",
       detail: String(err && err.message ? err.message : err),
     });
   }

@@ -96,13 +96,16 @@ function renderFileRows() {
       const typeText = item.kind === "dir" ? "目录" : "文件";
       const sizeText = item.kind === "file" ? C.readableSize(item.size) : "-";
       const enterBtn = item.kind === "dir" ? '<button type="button" data-action="enter">进入</button>' : "";
+      const copyBtn = '<button type="button" class="ghost" data-action="copy">复制</button>';
+      const moveBtn = '<button type="button" class="ghost" data-action="move">移动</button>';
+      const downloadBtn = item.kind === "file" ? '<button type="button" class="ghost" data-action="download">下载</button>' : "";
       const sizeBtn = '<button type="button" class="ghost" data-action="size">大小</button>';
       const delBtn = '<button type="button" class="ghost" data-action="delete">删除</button>';
       return `<li class="file-row" data-name="${C.escapeHtml(item.name)}" data-kind="${C.escapeHtml(item.kind)}" data-size="${Number.isFinite(item.size) ? item.size : ""}">
         <span class="file-name">${item.kind === "dir" ? "[DIR]" : "[FILE]"} ${C.escapeHtml(item.name)}</span>
         <span>${typeText}</span>
         <span>${sizeText}</span>
-        <span class="file-actions">${enterBtn}${sizeBtn}${delBtn}</span>
+        <span class="file-actions">${enterBtn}${copyBtn}${moveBtn}${downloadBtn}${sizeBtn}${delBtn}</span>
       </li>`;
     })
     .join("");
@@ -128,6 +131,65 @@ async function deleteRemote(pathValue, kind) {
   if (!res.ok || !data || !data.ok) {
     throw new Error((data && data.message) || "删除失败");
   }
+}
+
+async function copyRemote(srcPath, dstPath, kind) {
+  const {res, data} = await C.api("/api/files/copy", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ip: state.file.ip, srcPath, dstPath, kind}),
+  });
+  if (!res.ok || !data || !data.ok) {
+    throw new Error((data && data.message) || "复制失败");
+  }
+}
+
+async function moveRemote(srcPath, dstPath) {
+  const {res, data} = await C.api("/api/files/move", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ip: state.file.ip, srcPath, dstPath}),
+  });
+  if (!res.ok || !data || !data.ok) {
+    throw new Error((data && data.message) || "移动失败");
+  }
+}
+
+function decodeBase64ToBlob(base64) {
+  const binary = atob(base64);
+  const chunkSize = 8192;
+  const chunks = [];
+  for (let i = 0; i < binary.length; i += chunkSize) {
+    const slice = binary.slice(i, i + chunkSize);
+    const bytes = new Uint8Array(slice.length);
+    for (let j = 0; j < slice.length; j += 1) {
+      bytes[j] = slice.charCodeAt(j);
+    }
+    chunks.push(bytes);
+  }
+  return new Blob(chunks, {type: "application/octet-stream"});
+}
+
+async function downloadRemote(pathValue) {
+  const {res, data} = await C.api("/api/files/download", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ip: state.file.ip, path: pathValue}),
+  });
+  if (!res.ok || !data || !data.ok) {
+    throw new Error((data && data.message) || "下载失败");
+  }
+
+  const fileName = data.fileName || "download.bin";
+  const blob = decodeBase64ToBlob(data.base64 || "");
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 async function loadOverview() {
@@ -224,6 +286,46 @@ els.fileList.addEventListener("click", async (event) => {
       return;
     }
     window.alert(`${name}\n大小: ${C.readableSize(Number(size))} (${size} B)`);
+    return;
+  }
+
+  if (action === "copy") {
+    const defaultPath = kind === "dir"
+      ? `${fullPath}_copy`
+      : (() => {
+          const dot = fullPath.lastIndexOf(".");
+          if (dot <= fullPath.lastIndexOf("\\")) return `${fullPath}.copy`;
+          return `${fullPath.slice(0, dot)}_copy${fullPath.slice(dot)}`;
+        })();
+    const dst = window.prompt("请输入目标路径（复制）", defaultPath);
+    if (!dst) return;
+    try {
+      await copyRemote(fullPath, C.normalizeWindowsPath(dst), kind);
+      setTimeout(() => loadFiles(state.file.path), 500);
+    } catch (err) {
+      window.alert(`复制失败: ${String(err.message || err)}`);
+    }
+    return;
+  }
+
+  if (action === "move") {
+    const dst = window.prompt("请输入目标路径（移动）", fullPath);
+    if (!dst) return;
+    try {
+      await moveRemote(fullPath, C.normalizeWindowsPath(dst));
+      setTimeout(() => loadFiles(state.file.path), 500);
+    } catch (err) {
+      window.alert(`移动失败: ${String(err.message || err)}`);
+    }
+    return;
+  }
+
+  if (action === "download") {
+    try {
+      await downloadRemote(fullPath);
+    } catch (err) {
+      window.alert(`下载失败: ${String(err.message || err)}`);
+    }
     return;
   }
 
