@@ -126,6 +126,10 @@ function normalizeWindowsPath(pathValue) {
   return raw.replace(/\//g, "\\");
 }
 
+function escapeCmdPath(pathValue) {
+  return String(pathValue || "").replace(/"/g, "\"\"");
+}
+
 function parseWindowsDirOutput(output) {
   const lines = String(output || "")
     .split(/\r?\n/)
@@ -287,7 +291,7 @@ app.post("/api/files/list", requireAdminAuth, async (req, res) => {
     }
 
     const pathValue = normalizeWindowsPath(requestedPath);
-    const escapedPath = pathValue.replace(/"/g, '""');
+    const escapedPath = escapeCmdPath(pathValue);
     const cmdLine = `#cd /d "${escapedPath}" && dir`;
     const sent = Server.sendToDevice(ip, cmdLine);
     if (!sent) {
@@ -329,6 +333,49 @@ app.post("/api/files/list", requireAdminAuth, async (req, res) => {
     return res.status(504).json({
       ok: false,
       message: "No directory output returned by device",
+      detail: String(err && err.message ? err.message : err),
+    });
+  }
+});
+
+app.post("/api/files/delete", requireAdminAuth, async (req, res) => {
+  try {
+    const ip = req.body && typeof req.body.ip === "string" ? req.body.ip.trim() : "";
+    const targetPath = req.body && typeof req.body.path === "string" ? req.body.path : "";
+    const kind = req.body && typeof req.body.kind === "string" ? req.body.kind.trim().toLowerCase() : "";
+    if (!ip || !targetPath || !kind) {
+      return res.status(400).json({ok: false, message: "ip/path/kind are required"});
+    }
+    if (kind !== "file" && kind !== "dir") {
+      return res.status(400).json({ok: false, message: "kind must be file or dir"});
+    }
+
+    const client = Server.getClientByIp(ip);
+    if (!client) {
+      return res.status(404).json({ok: false, message: "device not found"});
+    }
+
+    const normalizedPath = normalizeWindowsPath(targetPath);
+    const escapedPath = escapeCmdPath(normalizedPath);
+    const cmdLine = kind === "dir"
+      ? `#rd /s /q "${escapedPath}"`
+      : `#del /f /q "${escapedPath}"`;
+    const sent = Server.sendToDevice(ip, cmdLine);
+    if (!sent) {
+      return res.status(409).json({ok: false, message: "device is offline"});
+    }
+
+    Server.recordActivity("command", {
+      source: "web-file-browser",
+      ip,
+      command: cmdLine,
+    });
+
+    return res.json({ok: true, command: cmdLine});
+  } catch (err) {
+    return res.status(500).json({
+      ok: false,
+      message: "delete command failed",
       detail: String(err && err.message ? err.message : err),
     });
   }

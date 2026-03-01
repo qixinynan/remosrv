@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="/assets/css/dashboard.css" />
 </head>
 <body>
-  <div class="shell">
+  <div class="shell shell-3col">
     <aside class="sidebar">
       <div class="brand">RemoSrv</div>
       <nav class="menu">
@@ -18,31 +18,47 @@
       <button id="logoutBtn" class="ghost">退出登录</button>
     </aside>
 
-    <main class="main">
-      <section class="card">
-        <div class="card-header">
-          <h2>在线设备</h2>
-          <strong id="onlineCount">0</strong>
+    <main class="center terminal-layout">
+      <section class="terminal-card">
+        <header class="terminal-head">
+          <h2>Activity</h2>
+          <button id="clearLogs" class="ghost">清空</button>
+        </header>
+
+        <div id="logs" class="logs terminal-logs"></div>
+
+        <div class="terminal-bottom">
+          <div class="shortcut-strip">
+            <span class="muted">快捷命令</span>
+            <div id="quickStrip" class="quick-strip"></div>
+          </div>
+
+          <form id="commandForm" class="terminal-form">
+            <span class="prompt">&gt;</span>
+            <input id="commandInput" class="terminal-input" placeholder="输入命令，支持上下键历史" autocomplete="off" required />
+            <button type="submit">发送</button>
+          </form>
+
+          <label class="inline-check">
+            <input id="cmdMode" type="checkbox" checked />
+            <span>普通输入自动包装为 <code>#...</code></span>
+          </label>
         </div>
-        <ul id="deviceList" class="device-list"></ul>
       </section>
+    </main>
 
-      <section class="card">
-        <h2>发送命令</h2>
-        <form id="commandForm" class="row-form">
-          <input id="commandInput" placeholder="输入命令，例如 dir / !ls" required />
-          <button type="submit">发送</button>
-        </form>
-        <label class="inline-check">
-          <input id="cmdMode" type="checkbox" checked />
-          <span>普通输入自动包装为 <code>#...</code></span>
-        </label>
-      </section>
-
-      <section class="card">
+    <aside class="right-panel">
+      <section class="card right-card">
         <div class="card-header">
-          <h2>快捷命令</h2>
-          <a class="btn-link" href="/files">打开全屏文件管理器</a>
+          <h3>在线设备</h3>
+          <strong id="rightOnlineCount">0</strong>
+        </div>
+        <ul id="rightDeviceList" class="device-list"></ul>
+      </section>
+
+      <section class="card right-card">
+        <div class="card-header">
+          <h3>快捷命令管理</h3>
         </div>
         <form id="shortcutForm" class="shortcut-form">
           <input id="shortcutName" placeholder="名称" required />
@@ -50,17 +66,9 @@
           <button type="submit" id="shortcutSubmit">保存</button>
           <button type="button" id="shortcutCancel" class="ghost hidden">取消</button>
         </form>
-        <ul id="shortcutList" class="shortcut-list"></ul>
+        <ul id="rightShortcutList" class="shortcut-list"></ul>
       </section>
-
-      <section class="card logs-card">
-        <div class="card-header">
-          <h2>Activity</h2>
-          <button id="clearLogs" class="ghost">清空</button>
-        </div>
-        <div id="logs" class="logs"></div>
-      </section>
-    </main>
+    </aside>
   </div>
 
   <script src="/assets/js/common.js"></script>

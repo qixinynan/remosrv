@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="/assets/css/files.css" />
 </head>
 <body>
-  <div class="shell full">
+  <div class="shell shell-3col">
     <aside class="sidebar">
       <div class="brand">RemoSrv</div>
       <nav class="menu">
@@ -18,7 +18,7 @@
       <button id="logoutBtn" class="ghost">退出登录</button>
     </aside>
 
-    <main class="file-main">
+    <main class="center file-main">
       <header class="toolbar card">
         <div class="tool-left">
           <select id="fileDevice"></select>
@@ -39,6 +39,23 @@
         <ul id="fileList" class="table-body"></ul>
       </section>
     </main>
+
+    <aside class="right-panel">
+      <section class="card right-card">
+        <div class="card-header">
+          <h3>在线设备</h3>
+          <strong id="rightOnlineCount">0</strong>
+        </div>
+        <ul id="rightDeviceList" class="device-list"></ul>
+      </section>
+
+      <section class="card right-card">
+        <div class="card-header">
+          <h3>快捷命令</h3>
+        </div>
+        <ul id="rightShortcutList" class="shortcut-list"></ul>
+      </section>
+    </aside>
   </div>
 
   <script src="/assets/js/common.js"></script>

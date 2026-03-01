@@ -5,55 +5,66 @@ const state = {
   shortcuts: [],
   activity: [],
   editingShortcutId: null,
+  cmdHistory: [],
+  cmdCursor: -1,
+  cmdDraft: "",
 };
 
 const els = {
-  onlineCount: document.getElementById("onlineCount"),
-  deviceList: document.getElementById("deviceList"),
   commandForm: document.getElementById("commandForm"),
   commandInput: document.getElementById("commandInput"),
   cmdMode: document.getElementById("cmdMode"),
+  logs: document.getElementById("logs"),
+  clearLogs: document.getElementById("clearLogs"),
+  quickStrip: document.getElementById("quickStrip"),
+
+  rightOnlineCount: document.getElementById("rightOnlineCount"),
+  rightDeviceList: document.getElementById("rightDeviceList"),
+  rightShortcutList: document.getElementById("rightShortcutList"),
+
   shortcutForm: document.getElementById("shortcutForm"),
   shortcutName: document.getElementById("shortcutName"),
   shortcutCommand: document.getElementById("shortcutCommand"),
   shortcutSubmit: document.getElementById("shortcutSubmit"),
   shortcutCancel: document.getElementById("shortcutCancel"),
-  shortcutList: document.getElementById("shortcutList"),
-  logs: document.getElementById("logs"),
-  clearLogs: document.getElementById("clearLogs"),
+
   logoutBtn: document.getElementById("logoutBtn"),
 };
 
-function renderStats() {
-  els.onlineCount.textContent = String(state.stats.onlineDevices || 0);
+function renderRightStats() {
   const devices = state.stats.devices || [];
+  els.rightOnlineCount.textContent = String(state.stats.onlineDevices || 0);
   if (!devices.length) {
-    els.deviceList.innerHTML = '<li class="device-item"><small class="muted">暂无在线设备</small></li>';
+    els.rightDeviceList.innerHTML = '<li class="device-item"><small class="muted">暂无在线设备</small></li>';
     return;
   }
-  els.deviceList.innerHTML = devices
+  els.rightDeviceList.innerHTML = devices
     .map((item) => `<li class="device-item"><div>${C.escapeHtml(item.ip)}</div><small class="muted">Last ping: ${C.escapeHtml(C.fmtTime(item.lastPing))}</small></li>`)
     .join("");
 }
 
-function renderShortcuts() {
+function renderShortcutLists() {
   if (!state.shortcuts.length) {
-    els.shortcutList.innerHTML = '<li class="shortcut-item"><small class="muted">暂无快捷命令</small></li>';
+    els.quickStrip.innerHTML = "";
+    els.rightShortcutList.innerHTML = '<li class="shortcut-item"><small class="muted">暂无快捷命令</small></li>';
     return;
   }
-  els.shortcutList.innerHTML = state.shortcuts
-    .map((item) => {
-      return `<li class="shortcut-item" data-id="${C.escapeHtml(item.id)}">
-        <div class="shortcut-row"><strong>${C.escapeHtml(item.name)}</strong>
-          <span>
-            <button type="button" data-action="run">执行</button>
-            <button type="button" class="ghost" data-action="edit">编辑</button>
-            <button type="button" class="ghost" data-action="delete">删除</button>
-          </span>
-        </div>
-        <div class="shortcut-command">${C.escapeHtml(item.command)}</div>
-      </li>`;
-    })
+
+  els.quickStrip.innerHTML = state.shortcuts
+    .map((item) => `<button type="button" data-id="${C.escapeHtml(item.id)}">${C.escapeHtml(item.name)}</button>`)
+    .join("");
+
+  els.rightShortcutList.innerHTML = state.shortcuts
+    .map((item) => `<li class="shortcut-item" data-id="${C.escapeHtml(item.id)}">
+      <div class="shortcut-row"><strong>${C.escapeHtml(item.name)}</strong>
+        <span>
+          <button type="button" data-action="run">执行</button>
+          <button type="button" class="ghost" data-action="edit">编辑</button>
+          <button type="button" class="ghost" data-action="delete">删除</button>
+        </span>
+      </div>
+      <div class="shortcut-command">${C.escapeHtml(item.command)}</div>
+    </li>`)
     .join("");
 }
 
@@ -63,7 +74,7 @@ function renderLogs() {
 
 function addLocalLog(type, message) {
   state.activity.push({type, payload: {message}, at: new Date().toISOString()});
-  if (state.activity.length > 300) state.activity.shift();
+  if (state.activity.length > 500) state.activity.shift();
   renderLogs();
 }
 
@@ -75,18 +86,44 @@ function setEditingShortcut(item) {
   els.shortcutCommand.value = item ? item.command : "";
 }
 
-async function loadOverview() {
-  const {res, data} = await C.api("/api/overview");
-  if (!res.ok) return;
-  state.stats = data;
-  renderStats();
+function resetHistoryCursor() {
+  state.cmdCursor = -1;
+  state.cmdDraft = "";
 }
 
-async function loadShortcuts() {
-  const {res, data} = await C.api("/api/shortcuts");
-  if (!res.ok) return;
-  state.shortcuts = data.items || [];
-  renderShortcuts();
+function pushHistory(command) {
+  const text = String(command || "").trim();
+  if (!text) return;
+  const last = state.cmdHistory[state.cmdHistory.length - 1];
+  if (last !== text) {
+    state.cmdHistory.push(text);
+  }
+  if (state.cmdHistory.length > 200) {
+    state.cmdHistory.shift();
+  }
+  resetHistoryCursor();
+}
+
+function browseHistory(direction) {
+  if (!state.cmdHistory.length) return;
+  if (state.cmdCursor === -1) {
+    state.cmdDraft = els.commandInput.value;
+    state.cmdCursor = state.cmdHistory.length;
+  }
+  const next = state.cmdCursor + direction;
+  if (next < 0) {
+    state.cmdCursor = 0;
+  } else if (next > state.cmdHistory.length) {
+    state.cmdCursor = state.cmdHistory.length;
+  } else {
+    state.cmdCursor = next;
+  }
+
+  if (state.cmdCursor === state.cmdHistory.length) {
+    els.commandInput.value = state.cmdDraft;
+  } else {
+    els.commandInput.value = state.cmdHistory[state.cmdCursor] || "";
+  }
 }
 
 async function sendCommand(command) {
@@ -100,17 +137,65 @@ async function sendCommand(command) {
   }
 }
 
+async function loadOverview() {
+  const {res, data} = await C.api("/api/overview");
+  if (!res.ok) return;
+  state.stats = data;
+  renderRightStats();
+}
+
+async function loadShortcuts() {
+  const {res, data} = await C.api("/api/shortcuts");
+  if (!res.ok) return;
+  state.shortcuts = data.items || [];
+  renderShortcutLists();
+}
+
 els.commandForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const raw = els.commandInput.value.trim();
   if (!raw) return;
+
   const useCmdMode = Boolean(els.cmdMode.checked);
   const cmd = useCmdMode && !raw.startsWith("!") && !raw.startsWith("#") ? `#${raw}` : raw;
+
   try {
     await sendCommand(cmd);
+    pushHistory(raw);
     els.commandInput.value = "";
   } catch (err) {
     addLocalLog("command-error", String(err.message || err));
+  }
+});
+
+els.commandInput.addEventListener("keydown", (event) => {
+  if (event.key === "ArrowUp") {
+    event.preventDefault();
+    browseHistory(-1);
+    return;
+  }
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    browseHistory(1);
+  }
+});
+
+els.commandInput.addEventListener("input", () => {
+  if (state.cmdCursor === -1) return;
+  state.cmdDraft = els.commandInput.value;
+});
+
+els.quickStrip.addEventListener("click", async (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+  const id = target.dataset.id;
+  if (!id) return;
+  const item = state.shortcuts.find((x) => x.id === id);
+  if (!item) return;
+  try {
+    await sendCommand(item.command);
+  } catch (err) {
+    addLocalLog("shortcut-error", String(err.message || err));
   }
 });
 
@@ -138,11 +223,9 @@ els.shortcutForm.addEventListener("submit", async (event) => {
   await loadShortcuts();
 });
 
-els.shortcutCancel.addEventListener("click", () => {
-  setEditingShortcut(null);
-});
+els.shortcutCancel.addEventListener("click", () => setEditingShortcut(null));
 
-els.shortcutList.addEventListener("click", async (event) => {
+els.rightShortcutList.addEventListener("click", async (event) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
   const action = target.dataset.action;
@@ -150,8 +233,7 @@ els.shortcutList.addEventListener("click", async (event) => {
 
   const li = target.closest("li[data-id]");
   if (!li) return;
-  const id = li.dataset.id;
-  const item = state.shortcuts.find((x) => x.id === id);
+  const item = state.shortcuts.find((x) => x.id === li.dataset.id);
   if (!item) return;
 
   if (action === "run") {
@@ -184,9 +266,7 @@ els.clearLogs.addEventListener("click", () => {
   renderLogs();
 });
 
-els.logoutBtn.addEventListener("click", () => {
-  C.doLogout();
-});
+els.logoutBtn.addEventListener("click", () => C.doLogout());
 
 C.connectAdminWs(
   (packet) => {
@@ -194,24 +274,24 @@ C.connectAdminWs(
       state.stats = packet.payload.stats || state.stats;
       state.shortcuts = packet.payload.shortcuts || state.shortcuts;
       state.activity = packet.payload.activity || [];
-      renderStats();
-      renderShortcuts();
+      renderRightStats();
+      renderShortcutLists();
       renderLogs();
       return;
     }
     if (packet.type === "stats") {
       state.stats = packet.payload || state.stats;
-      renderStats();
+      renderRightStats();
       return;
     }
     if (packet.type === "shortcuts") {
       state.shortcuts = packet.payload.items || [];
-      renderShortcuts();
+      renderShortcutLists();
       return;
     }
     if (packet.type === "activity") {
       state.activity.push(packet.payload);
-      if (state.activity.length > 300) state.activity.shift();
+      if (state.activity.length > 500) state.activity.shift();
       renderLogs();
       return;
     }
@@ -225,6 +305,6 @@ C.connectAdminWs(
 
 loadOverview();
 loadShortcuts();
-renderStats();
-renderShortcuts();
+renderRightStats();
+renderShortcutLists();
 renderLogs();

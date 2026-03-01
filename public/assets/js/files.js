@@ -2,6 +2,7 @@ const C = window.RemoCommon;
 
 const state = {
   stats: {onlineDevices: 0, devices: []},
+  shortcuts: [],
   file: {
     ip: "",
     path: "C:\\",
@@ -17,15 +18,45 @@ const els = {
   fileUp: document.getElementById("fileUp"),
   fileMeta: document.getElementById("fileMeta"),
   fileList: document.getElementById("fileList"),
+
+  rightOnlineCount: document.getElementById("rightOnlineCount"),
+  rightDeviceList: document.getElementById("rightDeviceList"),
+  rightShortcutList: document.getElementById("rightShortcutList"),
+
   logoutBtn: document.getElementById("logoutBtn"),
 };
 
 function ensureSelectedDevice() {
   const devices = state.stats.devices || [];
   const exists = devices.some((item) => item.ip === state.file.ip);
-  if (!exists) {
-    state.file.ip = devices.length ? devices[0].ip : "";
+  if (!exists) state.file.ip = devices.length ? devices[0].ip : "";
+}
+
+function renderRightStats() {
+  const devices = state.stats.devices || [];
+  els.rightOnlineCount.textContent = String(state.stats.onlineDevices || 0);
+
+  if (!devices.length) {
+    els.rightDeviceList.innerHTML = '<li class="device-item"><small class="muted">暂无在线设备</small></li>';
+    return;
   }
+
+  els.rightDeviceList.innerHTML = devices
+    .map((item) => `<li class="device-item"><div>${C.escapeHtml(item.ip)}</div><small class="muted">Last ping: ${C.escapeHtml(C.fmtTime(item.lastPing))}</small></li>`)
+    .join("");
+}
+
+function renderRightShortcuts() {
+  if (!state.shortcuts.length) {
+    els.rightShortcutList.innerHTML = '<li class="shortcut-item"><small class="muted">暂无快捷命令</small></li>';
+    return;
+  }
+  els.rightShortcutList.innerHTML = state.shortcuts
+    .map((item) => `<li class="shortcut-item" data-id="${C.escapeHtml(item.id)}">
+      <div class="shortcut-row"><strong>${C.escapeHtml(item.name)}</strong><button type="button" data-action="run">执行</button></div>
+      <div class="shortcut-command">${C.escapeHtml(item.command)}</div>
+    </li>`)
+    .join("");
 }
 
 function renderDeviceSelect() {
@@ -66,22 +97,53 @@ function renderFileRows() {
       const sizeText = item.kind === "file" ? C.readableSize(item.size) : "-";
       const enterBtn = item.kind === "dir" ? '<button type="button" data-action="enter">进入</button>' : "";
       const sizeBtn = '<button type="button" class="ghost" data-action="size">大小</button>';
+      const delBtn = '<button type="button" class="ghost" data-action="delete">删除</button>';
       return `<li class="file-row" data-name="${C.escapeHtml(item.name)}" data-kind="${C.escapeHtml(item.kind)}" data-size="${Number.isFinite(item.size) ? item.size : ""}">
         <span class="file-name">${item.kind === "dir" ? "[DIR]" : "[FILE]"} ${C.escapeHtml(item.name)}</span>
         <span>${typeText}</span>
         <span>${sizeText}</span>
-        <span class="file-actions">${enterBtn}${sizeBtn}</span>
+        <span class="file-actions">${enterBtn}${sizeBtn}${delBtn}</span>
       </li>`;
     })
     .join("");
+}
+
+async function sendCommand(command) {
+  const {res, data} = await C.api("/api/commands", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({command}),
+  });
+  if (!res.ok || !data || !data.ok) {
+    throw new Error((data && (data.message || (data.result && data.result.message))) || "发送失败");
+  }
+}
+
+async function deleteRemote(pathValue, kind) {
+  const {res, data} = await C.api("/api/files/delete", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ip: state.file.ip, path: pathValue, kind}),
+  });
+  if (!res.ok || !data || !data.ok) {
+    throw new Error((data && data.message) || "删除失败");
+  }
 }
 
 async function loadOverview() {
   const {res, data} = await C.api("/api/overview");
   if (!res.ok) return;
   state.stats = data;
+  renderRightStats();
   renderDeviceSelect();
   renderFileRows();
+}
+
+async function loadShortcuts() {
+  const {res, data} = await C.api("/api/shortcuts");
+  if (!res.ok) return;
+  state.shortcuts = data.items || [];
+  renderRightShortcuts();
 }
 
 async function loadFiles(pathValue) {
@@ -136,7 +198,7 @@ els.fileUp.addEventListener("click", () => {
   loadFiles(state.file.path);
 });
 
-els.fileList.addEventListener("click", (event) => {
+els.fileList.addEventListener("click", async (event) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
   const action = target.dataset.action;
@@ -147,11 +209,11 @@ els.fileList.addEventListener("click", (event) => {
 
   const name = row.dataset.name || "";
   const kind = row.dataset.kind || "";
+  const fullPath = C.joinWindowsPath(state.file.path, name);
 
   if (action === "enter" && kind === "dir") {
-    const next = C.joinWindowsPath(state.file.path, name);
-    state.file.path = next;
-    loadFiles(next);
+    state.file.path = fullPath;
+    loadFiles(fullPath);
     return;
   }
 
@@ -162,27 +224,64 @@ els.fileList.addEventListener("click", (event) => {
       return;
     }
     window.alert(`${name}\n大小: ${C.readableSize(Number(size))} (${size} B)`);
+    return;
+  }
+
+  if (action === "delete") {
+    const confirmed = window.confirm(`确认删除 ${fullPath} ?`);
+    if (!confirmed) return;
+    try {
+      await deleteRemote(fullPath, kind);
+      setTimeout(() => loadFiles(state.file.path), 500);
+    } catch (err) {
+      window.alert(`删除失败: ${String(err.message || err)}`);
+    }
   }
 });
 
-els.logoutBtn.addEventListener("click", () => {
-  C.doLogout();
+els.rightShortcutList.addEventListener("click", async (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+  if (target.dataset.action !== "run") return;
+  const li = target.closest("li[data-id]");
+  if (!li) return;
+  const item = state.shortcuts.find((x) => x.id === li.dataset.id);
+  if (!item) return;
+  try {
+    await sendCommand(item.command);
+  } catch (err) {
+    window.alert(String(err.message || err));
+  }
 });
+
+els.logoutBtn.addEventListener("click", () => C.doLogout());
 
 C.connectAdminWs((packet) => {
   if (packet.type === "init") {
     state.stats = packet.payload.stats || state.stats;
+    state.shortcuts = packet.payload.shortcuts || [];
+    renderRightStats();
+    renderRightShortcuts();
     renderDeviceSelect();
     renderFileRows();
     return;
   }
   if (packet.type === "stats") {
     state.stats = packet.payload || state.stats;
+    renderRightStats();
     renderDeviceSelect();
     renderFileRows();
+    return;
+  }
+  if (packet.type === "shortcuts") {
+    state.shortcuts = packet.payload.items || [];
+    renderRightShortcuts();
   }
 });
 
 loadOverview();
+loadShortcuts();
+renderRightStats();
+renderRightShortcuts();
 renderDeviceSelect();
 renderFileRows();
