@@ -3,6 +3,12 @@ const state = {
   shortcuts: [],
   activity: [],
   editingShortcutId: null,
+  fileBrowser: {
+    ip: "",
+    path: "C:\\",
+    entries: [],
+    loading: false,
+  },
 };
 
 const els = {
@@ -10,6 +16,7 @@ const els = {
   deviceList: document.getElementById("deviceList"),
   commandForm: document.getElementById("commandForm"),
   commandInput: document.getElementById("commandInput"),
+  cmdMode: document.getElementById("cmdMode"),
   logs: document.getElementById("logs"),
   clearLogs: document.getElementById("clearLogs"),
   shortcutForm: document.getElementById("shortcutForm"),
@@ -18,6 +25,12 @@ const els = {
   shortcutSubmit: document.getElementById("shortcutSubmit"),
   shortcutCancel: document.getElementById("shortcutCancel"),
   shortcutList: document.getElementById("shortcutList"),
+  fileDevice: document.getElementById("fileDevice"),
+  filePath: document.getElementById("filePath"),
+  fileLoad: document.getElementById("fileLoad"),
+  fileUp: document.getElementById("fileUp"),
+  fileMeta: document.getElementById("fileMeta"),
+  fileList: document.getElementById("fileList"),
 };
 
 function fmtTime(value) {
@@ -36,24 +49,91 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function normalizeWindowsPath(pathValue) {
+  const raw = String(pathValue || "").trim();
+  if (!raw) return "C:\\";
+  return raw.replaceAll("/", "\\");
+}
+
+function parentWindowsPath(pathValue) {
+  const path = normalizeWindowsPath(pathValue).replace(/\\+$/, "");
+  if (/^[A-Za-z]:$/.test(path)) {
+    return `${path}\\`;
+  }
+  const i = path.lastIndexOf("\\");
+  if (i <= 2) {
+    return `${path.slice(0, 2)}\\`;
+  }
+  return path.slice(0, i);
+}
+
+function joinWindowsPath(base, name) {
+  const cleanBase = normalizeWindowsPath(base).replace(/\\+$/, "");
+  if (/^[A-Za-z]:$/.test(cleanBase)) {
+    return `${cleanBase}\\${name}`;
+  }
+  return `${cleanBase}\\${name}`;
+}
+
+function ensureSelectedDevice() {
+  const devices = state.stats.devices || [];
+  const exists = devices.some((item) => item.ip === state.fileBrowser.ip);
+  if (!exists) {
+    state.fileBrowser.ip = devices.length ? devices[0].ip : "";
+  }
+}
+
+function renderDeviceSelect() {
+  ensureSelectedDevice();
+  const devices = state.stats.devices || [];
+  if (!devices.length) {
+    els.fileDevice.innerHTML = '<option value="">No device</option>';
+    els.fileDevice.disabled = true;
+    return;
+  }
+  els.fileDevice.disabled = false;
+  els.fileDevice.innerHTML = devices
+    .map((item) => `<option value="${escapeHtml(item.ip)}">${escapeHtml(item.ip)}</option>`)
+    .join("");
+  els.fileDevice.value = state.fileBrowser.ip;
+}
+
 function renderStats() {
   els.onlineCount.textContent = String(state.stats.onlineDevices || 0);
   const devices = state.stats.devices || [];
   if (!devices.length) {
     els.deviceList.innerHTML = '<li class="device-item"><small>No device connected</small></li>';
-    return;
+  } else {
+    els.deviceList.innerHTML = devices
+      .map((item) => {
+        return `<li class="device-item"><div>${escapeHtml(item.ip)}</div><small>Last ping: ${escapeHtml(fmtTime(item.lastPing))}</small></li>`;
+      })
+      .join("");
   }
-  els.deviceList.innerHTML = devices
-    .map((item) => {
-      return `<li class="device-item"><div>${escapeHtml(item.ip)}</div><small>Last ping: ${escapeHtml(fmtTime(item.lastPing))}</small></li>`;
-    })
-    .join("");
+  renderDeviceSelect();
 }
 
 function lineType(type) {
   if (type === "command") return "command";
   if (type && type.includes("error")) return "error";
   return "default";
+}
+
+function formatActivity(entry) {
+  const p = entry.payload || {};
+  if (entry.type === "command") {
+    const command = p.command || "";
+    const target = p.ip ? ` [${p.ip}]` : "";
+    const resultMessage = p.result && p.result.message ? ` -> ${p.result.message}` : "";
+    return `Send${target}: ${command}${resultMessage}`;
+  }
+  if (entry.type === "device-message") {
+    return `Device [${p.ip || "unknown"}]: ${p.message || ""}`;
+  }
+  if (entry.type === "system" || entry.type === "system-error") {
+    return p.message || "";
+  }
+  return JSON.stringify(entry.payload || {});
 }
 
 function renderActivity() {
@@ -64,8 +144,8 @@ function renderActivity() {
   els.logs.innerHTML = state.activity
     .map((entry) => {
       const type = escapeHtml(entry.type || "event");
-      const payload = escapeHtml(JSON.stringify(entry.payload));
-      return `<div class="log-line"><span class="log-time">[${escapeHtml(fmtTime(entry.at))}]</span> <span class="log-type ${lineType(entry.type)}">${type}</span> ${payload}</div>`;
+      const text = escapeHtml(formatActivity(entry));
+      return `<div class="log-line"><span class="log-time">[${escapeHtml(fmtTime(entry.at))}]</span> <span class="log-type ${lineType(entry.type)}">${type}</span> ${text}</div>`;
     })
     .join("");
   els.logs.scrollTop = els.logs.scrollHeight;
@@ -100,6 +180,32 @@ function renderShortcuts() {
     .join("");
 }
 
+function renderFileList() {
+  els.filePath.value = state.fileBrowser.path;
+  if (!state.fileBrowser.ip) {
+    els.fileMeta.textContent = "No online device.";
+    els.fileList.innerHTML = '<li class="file-item"><small>No data</small></li>';
+    return;
+  }
+  if (state.fileBrowser.loading) {
+    els.fileMeta.textContent = `Loading ${state.fileBrowser.path} ...`;
+  } else {
+    els.fileMeta.textContent = `${state.fileBrowser.ip} | ${state.fileBrowser.path} | ${state.fileBrowser.entries.length} items`;
+  }
+  if (!state.fileBrowser.entries.length) {
+    els.fileList.innerHTML = '<li class="file-item"><small>Empty or not loaded</small></li>';
+    return;
+  }
+  els.fileList.innerHTML = state.fileBrowser.entries
+    .map((item) => {
+      const icon = item.kind === "dir" ? "[DIR]" : "[FILE]";
+      const action = item.kind === "dir" ? '<button type="button" data-action="enter">Enter</button>' : "";
+      const size = item.kind === "file" && Number.isFinite(item.size) ? `${item.size} B` : "";
+      return `<li class="file-item" data-name="${escapeHtml(item.name)}" data-kind="${escapeHtml(item.kind)}"><span class="file-name"><strong>${icon}</strong> ${escapeHtml(item.name)}</span><span>${escapeHtml(size)} ${action}</span></li>`;
+    })
+    .join("");
+}
+
 async function sendCommand(command) {
   const res = await fetch("/api/commands", {
     method: "POST",
@@ -108,7 +214,8 @@ async function sendCommand(command) {
   });
   const data = await res.json();
   if (!res.ok || !data.ok) {
-    throw new Error(data.message || "Failed to send command");
+    const msg = data.message || (data.result && data.result.message) || "Failed to send command";
+    throw new Error(msg);
   }
 }
 
@@ -133,6 +240,37 @@ function addLocalLog(type, payload) {
   renderActivity();
 }
 
+async function loadRemoteFiles(pathValue) {
+  if (!state.fileBrowser.ip) {
+    addLocalLog("system-error", {message: "No device selected for file browser"});
+    return;
+  }
+  const nextPath = normalizeWindowsPath(pathValue || state.fileBrowser.path);
+  state.fileBrowser.loading = true;
+  state.fileBrowser.path = nextPath;
+  renderFileList();
+
+  try {
+    const res = await fetch("/api/files/list", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ip: state.fileBrowser.ip, path: nextPath}),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) {
+      throw new Error(data.message || "Load files failed");
+    }
+    state.fileBrowser.path = data.path || nextPath;
+    state.fileBrowser.entries = Array.isArray(data.entries) ? data.entries : [];
+  } catch (err) {
+    addLocalLog("system-error", {message: `File browser: ${String(err.message || err)}`});
+    state.fileBrowser.entries = [];
+  } finally {
+    state.fileBrowser.loading = false;
+    renderFileList();
+  }
+}
+
 function connectAdminWs() {
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";
   const ws = new WebSocket(`${protocol}://${window.location.host}/admin/ws`);
@@ -153,11 +291,13 @@ function connectAdminWs() {
         renderStats();
         renderActivity();
         renderShortcuts();
+        renderFileList();
         return;
       }
       if (data.type === "stats") {
         state.stats = data.payload || state.stats;
         renderStats();
+        renderFileList();
         return;
       }
       if (data.type === "activity") {
@@ -178,13 +318,17 @@ function connectAdminWs() {
 
 els.commandForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  const command = els.commandInput.value.trim();
-  if (!command) return;
+  const rawCommand = els.commandInput.value.trim();
+  if (!rawCommand) return;
+  const useCmdMode = Boolean(els.cmdMode && els.cmdMode.checked);
+  const command = useCmdMode && !rawCommand.startsWith("!")
+    ? `!cmd ${rawCommand}`
+    : rawCommand;
   try {
     await sendCommand(command);
     els.commandInput.value = "";
   } catch (err) {
-    addLocalLog("command-error", {message: String(err)});
+    addLocalLog("command-error", {message: String(err.message || err)});
   }
 });
 
@@ -238,7 +382,7 @@ els.shortcutList.addEventListener("click", async (event) => {
     try {
       await sendCommand(item.command);
     } catch (err) {
-      addLocalLog("shortcut-error", {message: String(err)});
+      addLocalLog("shortcut-error", {message: String(err.message || err)});
     }
     return;
   }
@@ -262,9 +406,42 @@ els.shortcutList.addEventListener("click", async (event) => {
   }
 });
 
+els.fileDevice.addEventListener("change", () => {
+  state.fileBrowser.ip = els.fileDevice.value;
+  state.fileBrowser.entries = [];
+  renderFileList();
+});
+
+els.fileLoad.addEventListener("click", () => {
+  state.fileBrowser.path = normalizeWindowsPath(els.filePath.value);
+  loadRemoteFiles(state.fileBrowser.path);
+});
+
+els.fileUp.addEventListener("click", () => {
+  state.fileBrowser.path = parentWindowsPath(els.filePath.value);
+  loadRemoteFiles(state.fileBrowser.path);
+});
+
+els.fileList.addEventListener("click", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+  const action = target.dataset.action;
+  if (action !== "enter") return;
+
+  const row = target.closest("li[data-name][data-kind]");
+  if (!row) return;
+  if (row.dataset.kind !== "dir") return;
+
+  const name = row.dataset.name;
+  const nextPath = joinWindowsPath(state.fileBrowser.path, name);
+  state.fileBrowser.path = nextPath;
+  loadRemoteFiles(nextPath);
+});
+
 loadOverview();
 loadShortcuts();
 renderStats();
 renderActivity();
 renderShortcuts();
+renderFileList();
 connectAdminWs();

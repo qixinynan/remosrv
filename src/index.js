@@ -1,6 +1,7 @@
 const express = require('express');
 const expressWs = require('express-ws');
 const {processCommand} = require('./cmd.js')
+const {Message} = require("./msg");
 const {Server} = require('./server.js');
 const {Client} = require('./client.js')
 const path = require("path");
@@ -72,6 +73,88 @@ app.post("/api/commands", (req, res) => {
         return res.status(400).json({ok: false, result});
     }
     res.json({ok: true, result});
+});
+
+function normalizeWindowsPath(pathValue) {
+    const raw = String(pathValue || "").trim();
+    if (!raw) {
+        return "C:\\";
+    }
+    return raw.replaceAll("/", "\\");
+}
+
+function parseWindowsDirOutput(output) {
+    const lines = String(output || "").split(/\r?\n/).map((line) => line.trimEnd());
+    const entries = [];
+    let cwd = "";
+    for (const line of lines) {
+        const dirOfMatch = line.match(/^ Directory of (.+)$/i);
+        if (dirOfMatch) {
+            cwd = dirOfMatch[1].trim();
+            continue;
+        }
+        const entryMatch = line.match(/^(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2}\s+[AP]M)\s+(<DIR>|[\d,]+)\s+(.+)$/i);
+        if (!entryMatch) {
+            continue;
+        }
+        const flag = entryMatch[3].toUpperCase();
+        const name = entryMatch[4].trim();
+        if (name === "." || name === "..") {
+            continue;
+        }
+        entries.push({
+            name,
+            kind: flag === "<DIR>" ? "dir" : "file",
+            size: flag === "<DIR>" ? null : Number(entryMatch[3].replaceAll(",", "")),
+        });
+    }
+    return {cwd, entries};
+}
+
+app.post("/api/files/list", async (req, res) => {
+    const ip = (req.body && typeof req.body.ip === "string") ? req.body.ip.trim() : "";
+    const requestedPath = (req.body && typeof req.body.path === "string") ? req.body.path : "";
+    if (!ip) {
+        return res.status(400).json({ok: false, message: "ip is required"});
+    }
+    const client = Server.getClientByIp(ip);
+    if (!client) {
+        return res.status(404).json({ok: false, message: "device not found"});
+    }
+
+    const pathValue = normalizeWindowsPath(requestedPath);
+    const escapedPath = pathValue.replaceAll("\"", "\"\"");
+    const cmdLine = `cd /d "${escapedPath}" && dir`;
+    const packet = JSON.stringify(Message.new("cmd", cmdLine));
+    const sent = Server.sendToDevice(ip, packet);
+    if (!sent) {
+        return res.status(409).json({ok: false, message: "device is offline"});
+    }
+    Server.recordActivity("command", {
+        source: "web-file-browser",
+        ip,
+        command: `!cmd ${cmdLine}`,
+    });
+
+    try {
+        const output = await Server.waitDeviceMessage(ip, 10000, (message) => {
+            return !String(message).startsWith("Cannot find method:");
+        });
+        const parsed = parseWindowsDirOutput(output);
+        return res.json({
+            ok: true,
+            ip,
+            path: parsed.cwd || pathValue,
+            entries: parsed.entries,
+            raw: output,
+        });
+    } catch (err) {
+        return res.status(504).json({
+            ok: false,
+            message: "No directory output returned by device",
+            detail: String(err.message || err),
+        });
+    }
 });
 
 app.get("/api/shortcuts", (req, res) => {

@@ -89,6 +89,7 @@ h2 {
 }
 
 input,
+select,
 button {
   border-radius: 10px;
   border: 1px solid var(--line);
@@ -97,6 +98,10 @@ button {
 }
 
 input {
+  background: #fbfdff;
+}
+
+select {
   background: #fbfdff;
 }
 
@@ -164,6 +169,61 @@ button.warn {
   min-height: 60vh;
 }
 
+.hint {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.inline-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.file-tools {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 220px 1fr auto auto;
+}
+
+.file-list {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.file-item:last-child {
+  border-bottom: none;
+}
+
+.file-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.file-item button {
+  padding: 6px 10px;
+  font-size: 0.8rem;
+}
+
 .logs {
   margin-top: 8px;
   border: 1px solid var(--line);
@@ -210,5 +270,9 @@ button.warn {
 
   .logs {
     height: 45vh;
+  }
+
+  .file-tools {
+    grid-template-columns: 1fr;
   }
 }

@@ -7,6 +7,10 @@ class Server {
   static adminClients = new Set();
   /** @type {Array<{type:string;payload:any;at:string}>} */
   static activityLog = [];
+  /**
+   * @type {Map<string, Array<{resolve:(value:string)=>void, reject:(err:Error)=>void, timer:ReturnType<typeof setTimeout>, predicate?:((message:string)=>boolean)}>>}
+   */
+  static messageWaiters = new Map();
   static randomClose = false;
   static disableWLAN = false;
   /**
@@ -66,6 +70,35 @@ class Server {
       onlineDevices: devices.length,
       devices,
     };
+  }
+
+  /**
+   *
+   * @param {string} ip
+   * @returns {Client | null}
+   */
+  static getClientByIp(ip) {
+    for (const client of this.clients) {
+      if (client.ip === ip) {
+        return client;
+      }
+    }
+    return null;
+  }
+
+  /**
+   *
+   * @param {string} ip
+   * @param {string} message
+   * @returns {boolean}
+   */
+  static sendToDevice(ip, message) {
+    const client = this.getClientByIp(ip);
+    if (!client || client.ws.readyState !== 1) {
+      return false;
+    }
+    client.ws.send(message);
+    return true;
   }
 
   static getRecentActivity() {
@@ -130,6 +163,51 @@ class Server {
    */
   static onDeviceMessage(ip, message) {
     this.recordActivity("device-message", {ip, message});
+    const waiters = this.messageWaiters.get(ip);
+    if (!waiters || waiters.length === 0) {
+      return;
+    }
+    for (let i = 0; i < waiters.length; i += 1) {
+      const waiter = waiters[i];
+      if (waiter.predicate && !waiter.predicate(message)) {
+        continue;
+      }
+      clearTimeout(waiter.timer);
+      waiters.splice(i, 1);
+      waiter.resolve(message);
+      break;
+    }
+    if (waiters.length === 0) {
+      this.messageWaiters.delete(ip);
+    }
+  }
+
+  /**
+   *
+   * @param {string} ip
+   * @param {number} timeoutMs
+   * @param {(message:string)=>boolean} [predicate]
+   * @returns {Promise<string>}
+   */
+  static waitDeviceMessage(ip, timeoutMs = 8000, predicate) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        const waiters = this.messageWaiters.get(ip) || [];
+        const index = waiters.findIndex((item) => item.resolve === resolve);
+        if (index >= 0) {
+          waiters.splice(index, 1);
+        }
+        if (waiters.length === 0) {
+          this.messageWaiters.delete(ip);
+        } else {
+          this.messageWaiters.set(ip, waiters);
+        }
+        reject(new Error("Timed out waiting device response"));
+      }, timeoutMs);
+      const waiters = this.messageWaiters.get(ip) || [];
+      waiters.push({resolve, reject, timer, predicate});
+      this.messageWaiters.set(ip, waiters);
+    });
   }
   static randomCloseFun() {
     if (Server.disableWLAN) {
